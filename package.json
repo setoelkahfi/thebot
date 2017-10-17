@@ -11,6 +11,8 @@
   "dependencies": {
     "botbuilder": "^3.11.0",
     "dotenv": "^4.0.0",
-    "restify": "^6.2.0"
+    "restify": "^6.2.0",
+    "restify-clients": "^1.5.2",
+    "restify-plugins": "^1.6.0"
   }
 }
