@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Connector;
+using HelpDeskBot.Util;
 
 namespace HelpDeskBot.Dialogs
 {
@@ -40,7 +41,7 @@ namespace HelpDeskBot.Dialogs
             PromptDialog.Text(context, this.CategoryMessageReceivedAsync, "Which would be the category for this ticket (software, hardware, networking, security or other)?");
         }
 
-        private async Task CategoryMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
+        public async Task CategoryMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
         {
             this.category = await argument;
             var text = $"Great! I'm going to create a \"{this.severity}\" severity ticket in the \"{this.category}\" category. " +
@@ -48,12 +49,22 @@ namespace HelpDeskBot.Dialogs
             PromptDialog.Confirm(context, this.IssueConfirmedMessageReceivedAsync, text);
         }
 
-        private async Task IssueConfirmedMessageReceivedAsync(IDialogContext context, IAwaitable<bool> argument)
+        public async Task IssueConfirmedMessageReceivedAsync(IDialogContext context, IAwaitable<bool> argument)
         {
             var confirmed = await argument;
             if (confirmed)
             {
-                await context.PostAsync("Awesome! Your ticket has been created.");
+                var api = new TicketAPIClient();
+                var ticketId = await api.PostTicketAsync(this.category, this.severity, this.description);
+
+                if (ticketId != -1)
+                {
+                    await context.PostAsync($"Awesome! Your ticket has been created with the number {ticketId}.");
+                }
+                else
+                {
+                    await context.PostAsync("Oooops! Something went wrong while I was saving your ticket. Please try again later.");
+                }
             }
             else
             {
