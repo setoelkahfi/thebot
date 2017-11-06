@@ -8,6 +8,11 @@ namespace HelpDeskBot.Dialogs
     [Serializable]
     public class RootDialog : IDialog<object>
     {
+
+        private string category;
+        private string severity;
+        private string description;
+
         public Task StartAsync(IDialogContext context)
         {
             context.Wait(MessageReceivedAsync);
@@ -15,17 +20,18 @@ namespace HelpDeskBot.Dialogs
             return Task.CompletedTask;
         }
 
-        private async Task MessageReceivedAsync(IDialogContext context, IAwaitable<object> result)
+        private async Task MessageReceivedAsync(IDialogContext context, IAwaitable<IMessageActivity> argument)
         {
-            var activity = await result as Activity;
+            var message = await argument;
+            await context.PostAsync("Hi!, I'm the help desk bot and I can help you create a ticket.");
+            PromptDialog.Text(context, this.DescriptionMessageReceivedAsync, "First, please briefly describe your problem to me.");
+        }
 
-            // calculate something for us to return
-            int length = (activity.Text ?? string.Empty).Length;
-
-            // return our reply to the user
-            await context.PostAsync($"You sent {activity.Text} which was {length} characters");
-
-            context.Wait(MessageReceivedAsync);
+        public async Task DescriptionMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
+        {
+            this.description = await argument;
+            await context.PostAsync($"Got it. Your problem is \"{this.description}\"");
+            context.Done<object>(null);
         }
     }
 }
