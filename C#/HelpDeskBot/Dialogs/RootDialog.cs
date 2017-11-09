@@ -5,50 +5,81 @@ using Microsoft.Bot.Connector;
 using HelpDeskBot.Util;
 using System.Collections.Generic;
 using AdaptiveCards;
+using Microsoft.Bot.Builder.Luis;
+using Microsoft.Bot.Builder.Luis.Models;
 
 namespace HelpDeskBot.Dialogs
 {
     [Serializable]
-    public class RootDialog : IDialog<object>
+    [LuisModel("{43f9d8d9-74b2-4df1-9225-b428899432e5}", "{464b8b2ff9eb4deda82b66f1772b7636}")]
+    public class RootDialog : LuisDialog<object>
     {
 
         private string category;
         private string severity;
         private string description;
 
-        public Task StartAsync(IDialogContext context)
+        [LuisIntent("")]
+        [LuisIntent("None")]
+        public async Task None(IDialogContext context, LuisResult result)
         {
-            context.Wait(MessageReceivedAsync);
-
-            return Task.CompletedTask;
+            await context.PostAsync($"I'm sorry, I did not understand {result.Query}.\nType 'help' to know more about me :)");
+            context.Done<object>(null);
         }
 
-        private async Task MessageReceivedAsync(IDialogContext context, IAwaitable<IMessageActivity> argument)
+        [LuisIntent("Help")]
+        public async Task Help(IDialogContext context, LuisResult result)
         {
-            var message = await argument;
-            await context.PostAsync("Hi!, I'm the help desk bot and I can help you create a ticket.");
-            PromptDialog.Text(context, this.DescriptionMessageReceivedAsync, "First, please briefly describe your problem to me.");
+            await context.PostAsync("I'm the help desk bot and I can help you create a ticket.\n" +
+                            "You can tell me things like _I need to reset my password_ or _I cannot print_.");
+            context.Done<object>(null);
         }
 
-        public async Task DescriptionMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
+        [LuisIntent("SubmitTicket")]
+        public async Task SubmitTicket(IDialogContext context, LuisResult result)
         {
-            this.description = await argument;
-            var severities = new string[] { "high", "normal", "low"};
-            PromptDialog.Choice(context, this.SeverityMessageReceivedAsync, severities, "Which is the severity of this problem?");
+            EntityRecommendation categoryEntityRecommendation, severityEntityRecommendation;
+
+            result.TryFindEntity("category", out categoryEntityRecommendation);
+            result.TryFindEntity("severity", out severityEntityRecommendation);
+
+            this.category = ((Newtonsoft.Json.Linq.JArray)categoryEntityRecommendation?.Resolution["values"])?[0]?.ToString();
+            this.severity = ((Newtonsoft.Json.Linq.JArray)severityEntityRecommendation?.Resolution["values"])?[0]?.ToString();
+            this.description = result.Query;
+
+            await this.EnsureTicket(context);
         }
 
-        public async Task SeverityMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
+        private async Task EnsureTicket(IDialogContext context)
+        {
+            if (this.severity == null)
+            {
+                var severities = new string[] { "high", "normal", "low" };
+                PromptDialog.Choice(context, this.SeverityMessageReceivedAsync, severities, "Which is the severity of this problem?");
+            }
+            else if (this.category == null)
+            {
+                PromptDialog.Text(context, this.CategoryMessageReceivedAsync, "Which would be the category for this ticket (software, hardware, networking, security or other)?");
+
+            }
+            else
+            {
+                var text = $"Great! I'm going to create a **{this.severity}** severity ticket in the **{this.category}** category. " +
+                            $"The description I will use is _\"{this.description}\"_. Can you please confirm that this information is correct?";
+                PromptDialog.Confirm(context, this.IssueConfirmedMessageReceivedAsync, text);
+            }
+        }
+
+        private async Task SeverityMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
         {
             this.severity = await argument;
-            PromptDialog.Text(context, this.CategoryMessageReceivedAsync, "Which would be the category for this ticket (software, hardware, networking, security or other)?");
+            await this.EnsureTicket(context);
         }
 
-        public async Task CategoryMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
+        private async Task CategoryMessageReceivedAsync(IDialogContext context, IAwaitable<string> argument)
         {
             this.category = await argument;
-            var text = $"Great! I'm going to create a \"{this.severity}\" severity ticket in the \"{this.category}\" category. " +
-                        $"The description I will use is \"{this.description}\". Can you please confirm that this information is correct?";
-            PromptDialog.Confirm(context, this.IssueConfirmedMessageReceivedAsync, text);
+            await this.EnsureTicket(context);
         }
 
         public async Task IssueConfirmedMessageReceivedAsync(IDialogContext context, IAwaitable<bool> argument)
